@@ -23,6 +23,7 @@ if not int(os.environ.get('EXCLUDE_NGU_TESTS', 0)):
         "ngu_tests/test_hdnode_gen.py",
         "ngu_tests/test_hmac.py",
         "ngu_tests/test_k1.py",
+        "ngu_tests/test_anti_exfil.py",
         "ngu_tests/test_k1_gen.py",
         "ngu_tests/test_schnorr.py",
         "ngu_tests/test_musig.py",

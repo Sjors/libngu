@@ -77,3 +77,29 @@ hardware target.
 them into the existing state. The module keeps mutable DRBG and source-check
 state, so calls must be serialized. Python calls require the VM's GIL when
 threads are enabled; direct C callers own that synchronization.
+
+## Experimental interactive Schnorr anti-exfil
+
+Enable `NGU_INCL_SCHNORR=1` (or `NGU_INCL_MUSIG=1`) when building.
+The anti-exfil API is omitted when Schnorr support is disabled.
+
+`ngu.secp256k1.anti_exfil_commit(keypair, message32, commitment32)` returns
+the full 33-byte compressed original nonce. It does not return a signature.
+`anti_exfil_sign(keypair, message32, commitment32, nonce33, entropy32)`
+checks both supplied commitment fields, applies the host's nonzero scalar,
+and verifies the resulting BIP340 signature before returning its 64 bytes.
+Pass the actual signing keypair, including the Taproot tweak for key-path
+signing. Both calls use the same keypair and message.
+
+This implements the draft BIP-EXFIL single-signer protocol; the two hash tags
+are provisional and vectors must be regenerated after BIP tag assignment.
+It is separate from ordinary BIP340 signing, whose nonce derivation must not
+be reused for this additive protocol. The host must independently check the
+signature and the relation to its originally recorded nonce. After receiving
+a nonce, a retry must reuse the same transcript rather than fresh entropy.
+Neither round's transcript belongs in transaction metadata or diagnostic logs.
+
+The shared eight-vector test is `ngu/ngu_tests/test_anti_exfil.py`; run it
+with the native MicroPython build that includes ngu. No secret scalar
+operations are performed in MicroPython. This experimental implementation
+has not received cryptographic review.
