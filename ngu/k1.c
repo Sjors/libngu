@@ -16,6 +16,9 @@
 #include "cifra/ext/handy.h"
 
 #include "sec_shared.h"
+#if NGU_INCL_SCHNORR
+#include "anti_exfil.h"
+#endif
 
 // NGU_INCL_SCHNORR / NGU_INCL_MUSIG are set by the build (ngu/micropython.mk),
 // default off. They gate the optional BIP340 Schnorr and MuSig2 bindings below.
@@ -478,6 +481,54 @@ STATIC mp_obj_t s_sign_schnorr(mp_obj_t privkey_in, mp_obj_t digest_in, mp_obj_t
     return mp_obj_new_str_from_vstr(&mp_type_bytes, &rv);
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_3(s_sign_schnorr_obj, s_sign_schnorr);
+
+// Experimental interactive single-signer Schnorr protocol. The keypair must
+// already include the Taproot tweak; all secret arithmetic stays in native code.
+STATIC mp_obj_t s_anti_exfil_commit(mp_obj_t keypair_in, mp_obj_t digest_in, mp_obj_t commitment_in)
+{
+    sec_setup_ctx();
+    if(mp_obj_get_type(keypair_in) != &s_keypair_type) {
+        mp_raise_TypeError(MP_ERROR_TEXT("keypair type"));
+    }
+    mp_obj_keypair_t *keypair = MP_OBJ_TO_PTR(keypair_in);
+    mp_buffer_info_t digest, commitment;
+    mp_get_buffer_raise(digest_in, &digest, MP_BUFFER_READ);
+    mp_get_buffer_raise(commitment_in, &commitment, MP_BUFFER_READ);
+    if(digest.len != 32 || commitment.len != 32) {
+        mp_raise_ValueError(MP_ERROR_TEXT("anti-exfil length"));
+    }
+    unsigned char nonce[33];
+    if(!ngu_anti_exfil_commit(lib_ctx, nonce, digest.buf, &keypair->keypair, commitment.buf)) {
+        mp_raise_ValueError(MP_ERROR_TEXT("anti-exfil commitment"));
+    }
+    return mp_obj_new_bytes(nonce, sizeof(nonce));
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_3(s_anti_exfil_commit_obj, s_anti_exfil_commit);
+
+STATIC mp_obj_t s_anti_exfil_sign(size_t n_args, const mp_obj_t *args)
+{
+    (void)n_args;
+    sec_setup_ctx();
+    if(mp_obj_get_type(args[0]) != &s_keypair_type) {
+        mp_raise_TypeError(MP_ERROR_TEXT("keypair type"));
+    }
+    mp_obj_keypair_t *keypair = MP_OBJ_TO_PTR(args[0]);
+    mp_buffer_info_t fields[4];
+    const size_t lengths[4] = {32, 32, 33, 32};
+    for(int i = 0; i < 4; ++i) {
+        mp_get_buffer_raise(args[i+1], &fields[i], MP_BUFFER_READ);
+        if(fields[i].len != lengths[i]) {
+            mp_raise_ValueError(MP_ERROR_TEXT("anti-exfil length"));
+        }
+    }
+    unsigned char signature[64];
+    if(!ngu_anti_exfil_sign(lib_ctx, signature, fields[0].buf, &keypair->keypair,
+                           fields[1].buf, fields[2].buf, fields[3].buf)) {
+        mp_raise_ValueError(MP_ERROR_TEXT("anti-exfil signing"));
+    }
+    return mp_obj_new_bytes(signature, sizeof(signature));
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(s_anti_exfil_sign_obj, 5, 5, s_anti_exfil_sign);
 #endif // NGU_INCL_SCHNORR
 
 // KEY PAIRS (private key, with public key computed)
@@ -1361,6 +1412,8 @@ STATIC const mp_rom_map_elem_t globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_sign), MP_ROM_PTR(&s_sign_obj) },
 #if NGU_INCL_SCHNORR
     { MP_ROM_QSTR(MP_QSTR_sign_schnorr), MP_ROM_PTR(&s_sign_schnorr_obj) },
+    { MP_ROM_QSTR(MP_QSTR_anti_exfil_commit), MP_ROM_PTR(&s_anti_exfil_commit_obj) },
+    { MP_ROM_QSTR(MP_QSTR_anti_exfil_sign), MP_ROM_PTR(&s_anti_exfil_sign_obj) },
     { MP_ROM_QSTR(MP_QSTR_verify_schnorr), MP_ROM_PTR(&s_verify_schnorr_obj) },
 #endif
     { MP_ROM_QSTR(MP_QSTR_ctx_rnd), MP_ROM_PTR(&s_ctx_rnd_obj) },

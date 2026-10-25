@@ -18,6 +18,7 @@ import ngu_tests.test_hash_gen
 import ngu_tests.test_hdnode
 import ngu_tests.test_hdnode_gen
 import ngu_tests.test_k1
+import ngu_tests.test_anti_exfil
 import ngu_tests.test_k1_gen
 import ngu_tests.test_schnorr
 import ngu_tests.test_musig
